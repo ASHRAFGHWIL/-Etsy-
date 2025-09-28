@@ -1,18 +1,38 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { GeneratedEmail } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const generateEmailContent = async (productDescription: string, productUrl: string): Promise<GeneratedEmail> => {
+export const generateEmailContent = async (productDescription: string, productUrl: string, customPrompt?: string, recipientCount?: number): Promise<GeneratedEmail> => {
   if (!productDescription || !productUrl) {
     throw new Error("Product description and URL are required.");
   }
 
-  const prompt = `
+  let audienceInstruction = '';
+  if (recipientCount !== undefined && recipientCount > 0) {
+      if (recipientCount === 1) {
+          audienceInstruction = 'ملاحظة هامة: الرسالة موجهة لمستلم واحد. يجب استخدام صيغة المفرد المذكر للمخاطبة ونبرة شخصية ومباشرة (مثال: "لك خصيصاً"، "اكتشفْ"، "نتمنى أن ينال إعجابك").';
+      } else if (recipientCount === 2) {
+          audienceInstruction = 'ملاحظة هامة: الرسالة موجهة لمستلمين اثنين. يجب استخدام صيغة المثنى للمخاطبة (مثال: "لكما"، "اكتشفا"، "نتمنى أن ينال إعجابكما").';
+      } else if (recipientCount >= 3 && recipientCount <= 10) {
+          audienceInstruction = `ملاحظة هامة: الرسالة موجهة لمجموعة صغيرة من ${recipientCount} عملاء. يجب استخدام صيغة جمع القلة للمخاطبة (مثال: "لكم"، "اكتشفوا"، "نتمنى أن ينال إعجابكم").`;
+      } else { // recipientCount > 10
+          audienceInstruction = `ملاحظة هامة: الرسالة موجهة لمجموعة كبيرة من ${recipientCount} عميلاً. يجب استخدام صيغة جمع الكثرة ونبرة أكثر عمومية (مثال: "لكم جميعاً"، "ندعوكم لاكتشاف").`;
+      }
+  }
+
+
+  let prompt: string;
+
+  if (customPrompt && customPrompt.trim() !== '') {
+    prompt = customPrompt
+      .replace(/{{productDescription}}/g, productDescription)
+      .replace(/{{productUrl}}/g, productUrl);
+  } else {
+    prompt = `
 أنت خبير تسويق عبر البريد الإلكتروني متخصص في المنتجات الرقمية لمنصة Etsy، وتستهدف العملاء في الأسواق الأمريكية والأوروبية.
 مهمتك هي إنشاء بريد إلكتروني تسويقي احترافي، موجز، ومقنع باللغة العربية الفصحى.
-يجب أن يحتوي البريد الإلكتروني على سطر عنوان (subject) جذاب ومحتوى (body) يتضمن دعوة واضحة لاتخاذ إجراء (CTA).
+${audienceInstruction ? audienceInstruction + '\n' : ''}يجب أن يحتوي البريد الإلكتروني على سطر عنوان (subject) جذاب ومحتوى (body) يتضمن دعوة واضحة لاتخاذ إجراء (CTA).
 يجب أن تكون النبرة احترافية وودودة وجذابة. ركز على الفوائد الرئيسية للمنتج.
 
 معلومات المنتج كالتالي:
@@ -21,6 +41,8 @@ export const generateEmailContent = async (productDescription: string, productUr
 
 يرجى تقديم المخرج بتنسيق JSON يحتوي على مفتاحين: "subject" و "body". يجب أن يكون المحتوى نصًا واحدًا، ويمكنك استخدام "\\n" للأسطر الجديدة. يجب أن يكون المحتوى جاهزًا للإرسال ومصممًا ليتوافق مع جميع برامج البريد الإلكتروني الرئيسية مثل Gmail و Outlook. استخدم خطوطًا قياسية مثل Arial أو Tahoma.
   `;
+  }
+
 
   try {
     const response = await ai.models.generateContent({

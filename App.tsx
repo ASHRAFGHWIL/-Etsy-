@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { generateEmailContent } from './services/geminiService';
 import type { GeneratedEmail, ArchivedEmail } from './types';
@@ -33,7 +32,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme }) => (
 );
 
 interface InputFormProps {
-    onGenerate: (productDescription: string, productUrl: string, ownerEmail: string, mailingList: string) => void;
+    onGenerate: (productDescription: string, productUrl: string, ownerEmail: string, mailingList: string, customPrompt: string) => void;
     isLoading: boolean;
 }
 
@@ -42,6 +41,10 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, isLoading }) => {
     const [productUrl, setProductUrl] = useState('');
     const [ownerEmail, setOwnerEmail] = useState('');
     const [mailingList, setMailingList] = useState('');
+    const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+    const [customPrompt, setCustomPrompt] = useState('');
+
+    const recipientCount = mailingList.split(/[\n,;]+/).map(email => email.trim()).filter(Boolean).length;
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -58,7 +61,7 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, isLoading }) => {
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onGenerate(productDescription, productUrl, ownerEmail, mailingList);
+        onGenerate(productDescription, productUrl, ownerEmail, mailingList, customPrompt);
     };
 
     return (
@@ -112,6 +115,11 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, isLoading }) => {
                         placeholder="الصق قائمة الإيميلات هنا، كل بريد في سطر..."
                         required
                     />
+                     {recipientCount > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            عدد المستلمين: {recipientCount}. سيتم تكييف نبرة الرسالة تلقائيًا.
+                        </p>
+                    )}
                     <label htmlFor="csv-upload" className="mt-2 text-sm text-center text-gray-500 dark:text-gray-400 block">
                         أو{" "}
                         <span className="font-medium text-teal-600 hover:text-teal-500 dark:text-teal-400 dark:hover:text-teal-300 cursor-pointer">
@@ -120,6 +128,37 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, isLoading }) => {
                         <input id="csv-upload" type="file" className="sr-only" accept=".csv, .txt" onChange={handleFileChange} />
                     </label>
                 </div>
+
+                <div className="pt-2">
+                    <button
+                        type="button"
+                        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                        className="w-full flex justify-between items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-colors"
+                        aria-expanded={isAdvancedOpen}
+                    >
+                        <span className="font-semibold text-gray-700 dark:text-slate-300">الإعدادات المتقدمة</span>
+                        <ChevronDownIcon className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`}/>
+                    </button>
+                    {isAdvancedOpen && (
+                        <div className="mt-2 p-4 bg-gray-50 dark:bg-slate-800/50 rounded-md border dark:border-gray-200 dark:border-gray-700">
+                            <label htmlFor="custom-prompt" className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+                                موجه مخصص (Prompt)
+                            </label>
+                            <textarea
+                                id="custom-prompt"
+                                value={customPrompt}
+                                onChange={(e) => setCustomPrompt(e.target.value)}
+                                rows={8}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition dark:bg-slate-700 dark:border-gray-600 dark:text-slate-200 dark:placeholder-gray-400"
+                                placeholder="أدخل الموجه المخصص هنا. إذا ترك فارغًا، سيتم استخدام الموجه الافتراضي."
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                سيحل النظام تلقائيًا محل <code>{`{{productDescription}}`}</code> و <code>{`{{productUrl}}`}</code> بالقيم التي أدخلتها أعلاه.
+                            </p>
+                        </div>
+                    )}
+                </div>
+
                 <button
                     type="submit"
                     disabled={isLoading}
@@ -265,14 +304,16 @@ export default function App() {
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
     };
 
-    const handleGenerate = useCallback(async (productDescription: string, productUrl: string, ownerEmail: string, mailingList: string) => {
+    const handleGenerate = useCallback(async (productDescription: string, productUrl: string, ownerEmail: string, mailingList: string, customPrompt: string) => {
         setIsLoading(true);
         setError(null);
         setGeneratedEmail(null);
         setCurrentCampaignDetails({ productDescription, productUrl });
         
+        const recipientCount = mailingList.split(/[\n,;]+/).map(email => email.trim()).filter(Boolean).length;
+
         try {
-            const emailContent = await generateEmailContent(productDescription, productUrl);
+            const emailContent = await generateEmailContent(productDescription, productUrl, customPrompt, recipientCount);
             setGeneratedEmail(emailContent);
         } catch (e: any) {
             setError(e.message || 'حدث خطأ غير متوقع.');
